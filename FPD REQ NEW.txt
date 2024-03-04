@@ -1,0 +1,176 @@
+/* Formatted on 29-02-2024 22:54:02 (QP5 v5.252.13127.32867) */
+  SELECT LOCATION_NAME,
+         ORDER_PROCESS_TYPE_CODE,
+         OO.OUTBOUND_ORDER_ID,
+         OS.ORDER_STATUS_NAME,
+         OO.CLIENT_REFERENCE_NO1,
+         OO.CLIENT_REFERENCE_NO2,
+         (SELECT WC.WORKCENTER_NAME
+            FROM sl.item_transaction_log itl
+                 JOIN sl.workcenter wc ON itl.workcenter_id = wc.workcenter_id
+           WHERE     ITL.LOCATION_ID = 882
+                 AND ITL.ITEM_TRX_LOG_ID =
+                        (SELECT MAX (ITL1.ITEM_TRX_LOG_ID)
+                           FROM sl.item_transaction_log itl1
+                          WHERE     itl1.item_bcn = OO.CLIENT_REFERENCE_NO1
+                                AND ITL1.ORDER_ITEM_OPER_ID = 2))
+            workcenter,
+         SUBSTR (OO.CLIENT_REFERENCE_NO2, 4, 5) AS FPD_PART_NO,
+         (SELECT MAX (CC.PART_NO)
+            FROM SL.ITEM I
+                 INNER JOIN SL.COMPONENT_CODES CC
+                    ON     CC.ITEM_ID = I.ITEM_ID
+                       AND OOL.ORIGINAL_REQ_PART_ID = CC.PART_ID
+                       AND CC.ISADDED = 0                          --Removed--
+                 INNER JOIN SL.ITEM removed_i
+                    ON REMOVED_I.ITEM_BCN = CC.PART_NO
+                 INNER JOIN SL.PART REMOVED_P
+                    ON     REMOVED_P.PART_ID = OOL.ORIGINAL_REQ_PART_ID
+                       AND REMOVED_P.CLASS_ID = 8014
+           WHERE I.ITEM_BCN = OO.CLIENT_REFERENCE_NO1)
+            REMOVED_LCD_BCN,
+         (SELECT MAX (REMOVED_C.CONDITION_NAME)
+            FROM SL.ITEM I
+                 INNER JOIN SL.COMPONENT_CODES CC
+                    ON     CC.ITEM_ID = I.ITEM_ID
+                       AND OOL.ORIGINAL_REQ_PART_ID = CC.PART_ID
+                       AND CC.ISADDED = 0                          --Removed--
+                 INNER JOIN SL.ITEM removed_i
+                    ON REMOVED_I.ITEM_BCN = CC.PART_NO
+                 INNER JOIN SL.PART REMOVED_P
+                    ON     REMOVED_P.PART_ID = OOL.ORIGINAL_REQ_PART_ID
+                       AND REMOVED_P.CLASS_ID = 8014
+                 LEFT JOIN SL.CONDITION REMOVED_C
+                    ON REMOVED_C.CONDITION_ID = REMOVED_I.CONDITION_ID
+           WHERE I.ITEM_BCN = OO.CLIENT_REFERENCE_NO1)
+            REMOVED_LCD_CONDITION,
+         (SELECT UFFV.UNIVERSAL_FF_VALUE
+            FROM SL.PART P1
+                 INNER JOIN SL.UNIVERSAL_FLEX_FIELD_VALUE uffv
+                    ON UFFV.ENTITY_ID = P1.PART_ID
+           WHERE     SUBSTR (OO.CLIENT_REFERENCE_NO2, 4, 5) = P1.PART_NO
+                 AND UFFV.UNIVERSAL_FF_ID =
+                        (SELECT UFF.UNIVERSAL_FF_ID
+                           FROM SL.UNIVERSAL_FLEX_FIELD uff
+                          WHERE     UFF.LOCATION_ID = 882
+                                AND UFF.OWNER_ID = 241
+                                AND UFF.CONDITION_ID = 180
+                                AND UFF.FLEX_FIELD_ACTIVE = 1
+                                AND UPPER (UFF.UNIVERSAL_FF_NAME) =
+                                       'PANEL EXCHANGE'))
+            AS PANEL_EXCHANGE,
+         OOL.OUTBOUND_ORDER_LINE_ID,
+         OLS.ORDER_STATUS_NAME AS LINE_STATUS_ID,
+         ORG_P.PART_NO AS ORIGINAL_REQUESTED_PART_NO,
+         P.PART_NO AS FULFILLMENT_PART_NO,
+         OWNER_NAME,
+         C.CONDITION_NAME,
+         OOL.QUANTITY AS REQUESTED_QUANTITY,
+         OOL.ALLOCATED_QTY AS ALLOCATED_QUANTITY,
+         OOL.FULFILLED_QUANTITY,
+         SSTK.STOCKING_LOCATION_NAME SOURCE_STK,
+         DSTK.STOCKING_LOCATION_NAME DESTINATION_STK,
+         (SELECT PRFF.FLEX_FIELD_VALUE
+            FROM SL.PART_REQ_FLEX_FIELD PRFF
+                 INNER JOIN SL.PART_REQUISITION_EXT PRE
+                    ON PRE.PART_REQUISITION_EXT_ID =
+                          PRFF.PART_REQUISITION_EXT_ID
+           WHERE     PRFF.REQUISITION_ORDER_ID = OO.OUTBOUND_ORDER_ID
+                 AND UPPER (PRE.FLEX_FIELD_NAME) = 'GNOME ERROR')
+            AS GNOME_ERROR,
+         (SELECT PRFF.FLEX_FIELD_VALUE
+            FROM SL.PART_REQ_FLEX_FIELD PRFF
+                 INNER JOIN SL.PART_REQUISITION_EXT PRE
+                    ON PRE.PART_REQUISITION_EXT_ID =
+                          PRFF.PART_REQUISITION_EXT_ID
+           WHERE     PRFF.REQUISITION_ORDER_ID = OO.OUTBOUND_ORDER_ID
+                 AND UPPER (PRE.FLEX_FIELD_NAME) = 'SHIP COMPLETE FLAG')
+            AS SHIP_COMPLETE_FLAG,
+         (SELECT PRFF.FLEX_FIELD_VALUE
+            FROM SL.PART_REQ_FLEX_FIELD PRFF
+                 INNER JOIN SL.PART_REQUISITION_EXT PRE
+                    ON PRE.PART_REQUISITION_EXT_ID =
+                          PRFF.PART_REQUISITION_EXT_ID
+           WHERE     PRFF.REQUISITION_ORDER_ID = OO.OUTBOUND_ORDER_ID
+                 AND UPPER (PRE.FLEX_FIELD_NAME) = 'PART SUBSTITUTION')
+            AS PART_SUBSTITUTION,
+         (SELECT PRFF.FLEX_FIELD_VALUE
+            FROM SL.PART_REQ_FLEX_FIELD PRFF
+                 INNER JOIN SL.PART_REQUISITION_EXT PRE
+                    ON PRE.PART_REQUISITION_EXT_ID =
+                          PRFF.PART_REQUISITION_EXT_ID
+           WHERE     PRFF.REQUISITION_ORDER_ID = OO.OUTBOUND_ORDER_ID
+                 AND UPPER (PRE.FLEX_FIELD_NAME) = 'SCHEDULED SHIP DATE')
+            AS SCHEDULED_SHIP_DATE,
+         AOS.ALLOC_ORDER_ASSIGNMENT_ID,
+         WT.TASK_GROUP,
+         B.BIN_NAME,
+         OO.CREATED_TIMESTAMP,
+         ROUND (
+            REPORT_NET.CALC_WORKING_DAYS_NO_HOLIDAYS (OO.CREATED_TIMESTAMP,
+                                                      SYSDATE,
+                                                      872),
+            0)
+            AS TAT,                                           --872,Malaysia--
+         REPORT_NET.GET_FLEX_FIELD (
+            'Part',
+            'Model Number',
+            NULL,
+            NULL,
+            NULL,
+            (SELECT p4.part_id
+               FROM sl.part p4
+              WHERE p4.part_no = SUBSTR (OO.CLIENT_REFERENCE_NO2, 4, 5)),
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL)
+            AS "Model"
+    --           PFF."Model Number"      AS "Model"
+    FROM SL.OUTBOUND_ORDER OO
+         INNER JOIN SL.ORDER_STATUS OS
+            ON OS.ORDER_STATUS_ID = OO.ORDER_STATUS_ID
+         INNER JOIN SL.OUTBOUND_ORDER_LINE OOL
+            ON OOL.OUTBOUND_ORDER_ID = OO.OUTBOUND_ORDER_ID
+         INNER JOIN SL.ORDER_STATUS OLS
+            ON OLS.ORDER_STATUS_ID = OOL.LINE_STATUS_ID
+         LEFT JOIN SL.PART ORG_P ON ORG_P.PART_ID = OOL.ORIGINAL_REQ_PART_ID
+         LEFT JOIN sl.PART P ON P.PART_ID = OOL.PART_ID
+         LEFT JOIN sl.GEO_LOCATION G ON G.LOCATION_ID = OO.LOCATION_ID
+         LEFT JOIN sl.OWNER O ON O.OWNER_ID = OOL.OWNER_ID
+         LEFT JOIN sl.CONDITION C ON C.CONDITION_ID = OOL.CONDITION_ID
+         LEFT JOIN sl.BIN SBIN ON SBIN.BIN_ID = OOL.SOURCE_BIN_ID
+         LEFT JOIN sl.STOCKING_LOCATION SSTK
+            ON SSTK.STOCKING_LOCATION_ID = SBIN.STOCKING_LOCATION_ID
+         LEFT JOIN sl.BIN DBIN ON DBIN.BIN_ID = OOL.DESTINATION_BIN_ID
+         LEFT JOIN sl.STOCKING_LOCATION DSTK
+            ON DSTK.STOCKING_LOCATION_ID = DBIN.STOCKING_LOCATION_ID
+         LEFT JOIN SL.REQUISITION_TEMPLATE RT
+            ON RT.REQUISITION_TEMPLATE_ID = OO.REQ_TEMPLATE_ID
+         LEFT JOIN SL.ALLOC_ORDER_ASSIGNMENT AOS
+            ON     AOS.OUTBOUND_ORDER_ID = OOL.OUTBOUND_ORDER_ID
+               AND AOS.OOL_UID = OOL.OOL_UID
+               AND AOS.WAREHOUSE_TASK_ID IS NOT NULL
+               AND AOS.QUANTITY >= 1
+         LEFT JOIN SL.WAREHOUSE_TASK WT
+            ON WT.WAREHOUSE_TASK_ID = AOS.WAREHOUSE_TASK_ID
+         LEFT JOIN SL.BIN B ON B.BIN_ID = WT.SOURCE_BIN_ID
+   --join REPORT_NET.PART_FLEX_FIELD PFF
+   --       on PFF.PART_ID = SUBSTR(OO.CLIENT_REFERENCE_NO2,4,5)
+
+   WHERE     OO.ORDER_PROCESS_TYPE_CODE = 'OREQ'
+         AND UPPER (G.LOCATION_NAME) IN ('PENANG')
+         --and upper(o.owner_name) IN ('DELL', 'JGS SZOMBATHELY')
+         AND OO.ORDER_STATUS_ID IN (1, 2)
+         AND UPPER (RT.REQUISITION_TEMPLATE_NAME) = 'DELL FPD REPAIR PENANG'
+         AND OLS.ORDER_STATUS_ID IN (1, 2)
+--and dstk.stocking_location_name = 'DELL-MBR-WIP-PARTS'
+--and oo.created_timestamp >= sysdate - interval '30' Day
+--and oo.outbound_order_id = '3479241718'
+ORDER BY OO.CREATED_TIMESTAMP,
+         OO.OUTBOUND_ORDER_ID DESC,
+         OOL.OUTBOUND_ORDER_LINE_ID ASC
